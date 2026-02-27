@@ -28,8 +28,8 @@ def random_recommend(n_recommendations: int = 10, seed: int = 42) -> list[int]:
     recommendations = []    
 
     ### Ваш код здесь ###
-    recommendations = ratings_df['movieId'].to_numpy()
-    recommendations = np.random.choice(recommendations, size=n_recommendations)
+    recommendations = ratings_df['movieId'].unique()
+    recommendations = np.random.choice(recommendations, size=n_recommendations, replace=False)
     recommendations = recommendations.tolist()
     ### Конец вашего кода ###
 
@@ -38,7 +38,7 @@ def random_recommend(n_recommendations: int = 10, seed: int = 42) -> list[int]:
 
 def top_n_recommend(
     n_recommendations: int = 10, min_ratings: int = 10
-) -> list[tuple[int, float, int]]:
+) -> list[tuple[int, float, int, str]]:
     """
     Рекомендует самые популярные фильмы на основе среднего рейтинга и количества оценок.
 
@@ -47,12 +47,35 @@ def top_n_recommend(
         min_ratings: Минимальное количество рейтингов для фильма
 
     Returns:
-        Список кортежей (movieId, avg_rating, rating_count)
+        Список кортежей (movieId, avg_rating, rating_count, title)
     """
     ratings_df, movies_df = load_data()
     top_n_recs = []
 
     ### Ваш код здесь ###
+
+    movie_ratings = {}
+
+    for i in range(len(ratings_df)):
+        movie_id = ratings_df.iloc[i]["movieId"]
+        rating = ratings_df.iloc[i]["rating"]
+        if movie_id not in movie_ratings:
+            movie_ratings[movie_id] = []
+        movie_ratings[movie_id].append(rating)
+
+    movie_results = []
+
+    for movie_id in movie_ratings:
+        ratings = movie_ratings[movie_id]
+        rating_count = len(ratings)
+        if rating_count >= min_ratings:
+            avg_rating = np.mean(ratings)
+            title = movies_df[movies_df["movieId"] == movie_id]["title"].iloc[0]
+            movie_results.append((movie_id, avg_rating, rating_count, title))
+
+    movie_results.sort(key=lambda x: x[1], reverse=True)
+
+    top_n_recs = movie_results[:n_recommendations]
 
     ### Конец вашего кода ###
 
@@ -78,6 +101,15 @@ def evaluate_rec_systems(
     random_accuracy = 0.0
     popular_accuracy = 0.0
     ### Ваш код здесь ###
+
+    user_movies = ratings_df[ratings_df["userId"] == user_id]["movieId"].tolist()
+
+    random_recommendations = random_recommend(n_recommendations=n_recommendations, seed=random_state)
+    random_accuracy = sum(1 for m in random_recommendations if m in user_movies) / n_recommendations
+
+    popular_recommendations = top_n_recommend(n_recommendations=n_recommendations)
+    popular_movie_id = [m[0] for m in popular_recommendations]
+    popular_accuracy = sum(1 for m in popular_movie_id if m in user_movies) / n_recommendations
 
     ### Конец вашего кода ###
     return {"random_accuracy": random_accuracy, "popular_accuracy": popular_accuracy}
