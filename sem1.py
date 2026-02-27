@@ -29,7 +29,8 @@ def random_recommend(n_recommendations: int = 10, seed: int = 42) -> list[int]:
 
     ### Ваш код здесь ###
     recommendations = ratings_df['movieId'].unique()
-    recommendations = np.random.choice(recommendations, size=n_recommendations, replace=False)
+    recommendations = np.random.choice(
+        recommendations, size=n_recommendations, replace=False)
     recommendations = recommendations.tolist()
     ### Конец вашего кода ###
 
@@ -104,12 +105,15 @@ def evaluate_rec_systems(
 
     user_movies = ratings_df[ratings_df["userId"] == user_id]["movieId"].tolist()
 
-    random_recommendations = random_recommend(n_recommendations=n_recommendations, seed=random_state)
-    random_accuracy = sum(1 for m in random_recommendations if m in user_movies) / n_recommendations
+    random_recommendations = random_recommend(
+        n_recommendations=n_recommendations, seed=random_state)
+    random_accuracy = sum(
+        1 for m in random_recommendations if m in user_movies) / n_recommendations
 
     popular_recommendations = top_n_recommend(n_recommendations=n_recommendations)
     popular_movie_id = [m[0] for m in popular_recommendations]
-    popular_accuracy = sum(1 for m in popular_movie_id if m in user_movies) / n_recommendations
+    popular_accuracy = sum(
+        1 for m in popular_movie_id if m in user_movies) / n_recommendations
 
     ### Конец вашего кода ###
     return {"random_accuracy": random_accuracy, "popular_accuracy": popular_accuracy}
