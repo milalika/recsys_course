@@ -42,7 +42,22 @@ def jaccard_similarity(a: np.array, b: np.array) -> float:
 
     Это значение в диапазоне [0,1].
     """
-    raise(NotImplementedError("Реализуйте функцию jaccard_similarity"))
+
+     # 1) бинарные маски
+    mask_a = a > 0
+    mask_b = b > 0
+
+    # 2) пересечение
+    intersection = np.logical_and(mask_a, mask_b).sum()
+
+    # 3) объединение
+    union = np.logical_or(mask_a, mask_b).sum()
+
+    if union == 0:
+        return 0.0
+    
+    # 4) возврат отношения
+    return intersection / union
 
 
 def build_user_user_matrix(user_item_matrix: np.ndarray) -> np.ndarray:
@@ -65,8 +80,26 @@ def build_user_user_matrix(user_item_matrix: np.ndarray) -> np.ndarray:
     Returns:
         Матрица схожести Жаккара (n_users, n_users).
     """
-    raise(NotImplementedError("Реализуйте функцию build_user_user_matrix"))
 
+    # 1) преобразование в бинарную матрицу
+    X = (user_item_matrix > 0).astype(np.int32)
+
+    # 2) пересечения
+    intersection = X @ X.T 
+
+    # 3) количество оцененных фильмов
+    row_sums = X.sum(axis=1, keepdims=True)
+
+    # 4) объединение
+    union = row_sums + row_sums.T - intersection
+
+    similarity = np.divide(intersection, union,
+        out=np.zeros_like(intersection, dtype=float),
+        where=union!=0)
+
+    np.fill_diagonal(similarity, 1.0)
+
+    return similarity
 
 def predict_rating(
     user_id: int,
@@ -98,8 +131,44 @@ def predict_rating(
     Returns:
         Предсказанный рейтинг (float).
     """
-    raise(NotImplementedError("Реализуйте функцию predict_rating"))
 
+    # 1) все рейтинги фильма
+    item_ratings = user_item_matrix[:, item_id]
+    
+    # 2) сходства с активным пользователем
+    user_similarities = user_user_matrix[user_id]
+    
+    # 3) оставляем тех, кто оценил фильм
+    users_who_rated = item_ratings > 0
+    
+    if not np.any(users_who_rated):
+        return 0.0
+    
+    similarities = user_similarities[users_who_rated]
+    ratings = item_ratings[users_who_rated]
+    
+    # 4) сортируем по убыванию схожести
+    paired = list(zip(similarities, ratings))
+    paired.sort(key=lambda x: x[0], reverse=True)
+    
+    # 5) берем top-k
+    top_k_pairs = paired[:topk]
+    
+    # 6) взвешенное среднее
+    similarities_topk = [sim for sim, _ in top_k_pairs if sim > 0]
+    ratings_topk = [rating for sim, rating in top_k_pairs if sim > 0]
+    
+    if len(similarities_topk) == 0:
+        return 0.0
+    
+    weighted_sum = np.sum(np.array(similarities_topk) * np.array(ratings_topk))
+    sum_sim = np.sum(similarities_topk)
+    
+    # 7) возвращаем предсказанный рейтинг
+    if sum_sim > 0:
+        return weighted_sum / sum_sim
+    else:
+        return 0.0
 
 def predict_items_for_user(
     user_id: int,
@@ -133,7 +202,66 @@ def predict_items_for_user(
     Returns:
         Список рекомендованных индексов фильмов (item_id).
     """
-    raise(NotImplementedError("Реализуйте функцию predict_items_for_user"))
+
+     # 1. сходства с пользователями
+    similarities = user_user_matrix[user_id].copy()
+
+    # 2. исключаем самого пользователя
+    similarities[user_id] = -1
+
+    # top-r наиболее похожих
+    neighbor_idx = np.argsort(similarities)[::-1][:r]
+
+    # 3. фильмы с оценкой >= 4.0 у соседей
+    neighbor_ratings = user_item_matrix[neighbor_idx]
+    high_rated_mask = neighbor_ratings >= 4.0
+
+    # кандидаты
+    candidate_items = np.where(high_rated_mask.any(axis=0))[0]
+
+    # 4. средний рейтинг среди соседей
+    scores = []
+    for item in candidate_items:
+        ratings = neighbor_ratings[:, item]
+        # valid = ratings > 0 
+
+        avg_rating = ratings.mean()
+        scores.append((item, avg_rating))
+
+    # 5. удаляем фильмы, которые пользователь оценил
+    user_rated = user_item_matrix[user_id] > 0
+    scores = [(item, score) for item, score in scores if not user_rated[item]]
+
+    # 6. сортировка по убыванию рейтинга
+    scores.sort(key=lambda x: x[1], reverse=True)
+
+    # 7. top-k
+    recommended_items = [int(item) for item, _ in scores[:k]]
+
+    print(neighbor_ratings[:, [1215, 1248, 2118, 2342, 2391]])
+    # .[[5. 0. 0. 0. 0.]
+    # [0. 0. 0. 0. 0.]
+    # [0. 0. 0. 0. 0.]
+    # [3. 0. 0. 0. 0.]
+    # [0. 0. 0. 0. 0.]
+    # [0. 5. 0. 0. 0.]
+    # [3. 5. 0. 0. 5.]
+    # [0. 0. 0. 0. 0.]
+    # [5. 0. 3. 0. 5.]
+    # [5. 5. 5. 5. 5.]]
+    print(neighbor_ratings[:, recommended_items])
+    # [[5.  5.  2.  5.  4. ]
+    # [4.  4.  5.  3.5 4. ]
+    # [5.  5.  5.  5.  5. ]
+    # [0.  5.  2.  4.  0. ]
+    # [5.  0.  4.  5.  5. ]
+    # [5.  4.  4.  4.  5. ]
+    # [5.  4.  5.  4.  5. ]
+    # [5.  3.  3.  0.  0. ]
+    # [4.  5.  4.  4.  3. ]
+    # [4.  5.  5.  4.  5. ]]
+
+    return recommended_items
 
 
 if __name__ == "__main__":
