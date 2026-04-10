@@ -72,8 +72,15 @@ class SVDRecommender:
     def _reconstruct_matrix(self, k: int) -> np.ndarray:
         if k <= 0:
             raise ValueError("k must be positive")
+        
+        U_k = self.U[:, :k]
+        S_k = self.S[:k]
+        V_k = self.V[:k, :]
+        
+        X_hat = U_k @ np.diag(S_k) @ V_k
+        return X_hat
 
-        raise NotImplementedError("Реализуйте восстановление матрицы")
+        # raise NotImplementedError("Реализуйте восстановление матрицы")
 
     def predict_rating(self, user_id: int, item_id: int, k: int = 20) -> float:
         """
@@ -86,7 +93,17 @@ class SVDRecommender:
         3) Предсказание для пары (user_id, item_id) берём из X_hat.
         4) Обрезаем результат в диапазон [0.0, 5.0].
         """
-        raise NotImplementedError("Реализуйте предсказание рейтинга")
+
+        # восстанавливаем X_hat
+        X_hat = self._reconstruct_matrix(k)
+        
+        # предсказание для пары (user_id, item_id) 
+        predicted = X_hat[user_id, item_id]
+        
+        # обрезаем результат в диапазон [0.0, 5.0]
+        return np.clip(predicted, 0.0, 5.0)
+
+        # raise NotImplementedError("Реализуйте предсказание рейтинга")
 
     def predict_items_for_user(
         self, user_id: int, k: int = 20, n_recommendations: int = 5
@@ -101,7 +118,31 @@ class SVDRecommender:
         4) Сортируем кандидатов по убыванию прогнозного рейтинга.
         5) Возвращаем top-n индексы фильмов.
         """
-        raise NotImplementedError("Реализуйте рекомендацию фильмов")
+
+        # восстанавливаем приближенную матрицу
+        X_hat = self._reconstruct_matrix(k)
+        
+        # берём прогнозы для пользователя
+        user_predictions = X_hat[user_id]
+        
+        # находим фильмы, уже оцененные пользователем
+        user_ratings = self.ui_matrix[user_id]
+        
+        # создаём список кандидатов
+        candidates = []
+        for item_id in range(len(user_predictions)):
+            # пропускаем уже оцененные фильмы
+            if user_ratings[item_id] > 0:
+                continue
+            candidates.append((item_id, user_predictions[item_id]))
+        
+        # сортируем по убыванию рейтинга
+        candidates.sort(key=lambda x: x[1], reverse=True)
+        
+        # возвращаем top-n индексов фильмов
+        return [item_id for item_id, _ in candidates[:n_recommendations]]
+
+        # raise NotImplementedError("Реализуйте рекомендацию фильмов")
 
 
 if __name__ == "__main__":
